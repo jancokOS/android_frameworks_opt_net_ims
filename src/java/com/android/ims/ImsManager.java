@@ -1673,6 +1673,10 @@ public class ImsManager {
                 mListener.registrationAssociatedUriChanged(uris);
             }
         }
+
+        //TODO: Add @Override once the method is available in the AIDL
+        public void registrationChangeFailed(int targetAccessTech, ImsReasonInfo imsReasonInfo) {
+        }
     }
 
     /**
