@@ -1265,6 +1265,25 @@ public class ImsCallSession {
             }
         }
 
+        /**
+         * Received RTT modify request from remote party
+         */
+        public void callSessionRttModifyRequestReceived(IImsCallSession session,
+                ImsCallProfile callProfile) {
+        }
+
+        /**
+         * Received response for RTT modify request
+         */
+        public void callSessionRttModifyResponseReceived(int status) {
+        }
+
+        /**
+         * RTT Message received
+         */
+        public void callSessionRttMessageReceived(String rttMessage) {
+        }
+
     }
 
     /**
