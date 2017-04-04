@@ -482,9 +482,12 @@ public class ImsManager {
                     imsManager.turnOffIms();
                 }
 
-                // Force IMS to register over LTE when turning off WFC
+                TelephonyManager tm = (TelephonyManager) context
+                        .getSystemService(Context.TELEPHONY_SERVICE);
                 setWfcModeInternal(context, enabled
-                        ? getWfcMode(context)
+                        // Choose wfc mode per current roaming preference
+                        ? getWfcMode(context, tm.isNetworkRoaming())
+                        // Force IMS to register over LTE when turning off WFC
                         : ImsConfig.WfcModeFeatureValueConstants.CELLULAR_PREFERRED);
             } catch (ImsException e) {
                 loge("setWfcSetting(): ", e);
@@ -840,13 +843,11 @@ public class ImsManager {
         boolean enabled = isVtEnabledByUser(mContext);
         boolean isNonTty = isNonTtyOrTtyOnVolteEnabled(mContext);
         boolean isDataEnabled = isDataEnabled();
+        boolean ignoreDataEnabledChanged = getBooleanCarrierConfig(mContext,
+                CarrierConfigManager.KEY_IGNORE_DATA_ENABLED_CHANGED_FOR_VIDEO_CALLS);
 
-        boolean isFeatureOn = available && enabled && isNonTty && isDataEnabled;
-        if (getBooleanCarrierConfig(mContext,
-                "config_enable_vt_with_mobile_data_off")) {
-            isFeatureOn = available && enabled && isNonTty;
-            log("not check isDataEnabled when updateVideoCallFeatureValue");
-        }
+        boolean isFeatureOn = available && enabled && isNonTty
+                && (ignoreDataEnabledChanged || isDataEnabled);
 
         log("updateVideoCallFeatureValue: available = " + available
                 + ", enabled = " + enabled
@@ -1466,13 +1467,10 @@ public class ImsManager {
                         TelephonyManager.NETWORK_TYPE_LTE, turnOn ? 1 : 0, mImsConfigListener);
 
                 if (isVtEnabledByPlatform(mContext)) {
+                    boolean ignoreDataEnabledChanged = getBooleanCarrierConfig(mContext,
+                            CarrierConfigManager.KEY_IGNORE_DATA_ENABLED_CHANGED_FOR_VIDEO_CALLS);
                     boolean enableViLte = turnOn && isVtEnabledByUser(mContext) &&
-                            isDataEnabled();
-                    if (getBooleanCarrierConfig(mContext,
-                            "config_enable_vt_with_mobile_data_off")) {
-                        enableViLte = turnOn && isVtEnabledByUser(mContext);
-                        log("not check isDataEnabled when setLteFeatureValues");
-                    }
+                            (ignoreDataEnabledChanged || isDataEnabled());
                     config.setFeatureValue(ImsConfig.FeatureConstants.FEATURE_TYPE_VIDEO_OVER_LTE,
                             TelephonyManager.NETWORK_TYPE_LTE,
                             enableViLte ? 1 : 0,
@@ -1540,7 +1538,7 @@ public class ImsManager {
     /**
      * Adapter class for {@link IImsRegistrationListener}.
      */
-    private class ImsRegistrationListenerProxy extends IImsRegistrationListener.Stub {
+    private static class ImsRegistrationListenerProxy extends IImsRegistrationListener.Stub {
         private int mServiceClass;
         private ImsConnectionStateListener mListener;
 
@@ -1586,6 +1584,7 @@ public class ImsManager {
 
             if (mListener != null) {
                 mListener.onImsConnected();
+                mListener.onImsConnected(imsRadioTech);
             }
         }
 
@@ -1674,8 +1673,14 @@ public class ImsManager {
             }
         }
 
-        //TODO: Add @Override once the method is available in the AIDL
+        @Override
         public void registrationChangeFailed(int targetAccessTech, ImsReasonInfo imsReasonInfo) {
+            if (DBG) log("registrationChangeFailed :: targetAccessTech=" + targetAccessTech +
+                    ", imsReasonInfo=" + imsReasonInfo);
+
+            if (mListener != null) {
+                mListener.onRegistrationChangeFailed(targetAccessTech, imsReasonInfo);
+            }
         }
     }
 
@@ -1818,6 +1823,8 @@ public class ImsManager {
         pw.println("  mConfigUpdated = " + mConfigUpdated);
         pw.println("  mImsService = " + mImsService);
         pw.println("  mDataEnabled = " + isDataEnabled());
+        pw.println("  ignoreDataEnabledChanged = " + getBooleanCarrierConfig(mContext,
+                CarrierConfigManager.KEY_IGNORE_DATA_ENABLED_CHANGED_FOR_VIDEO_CALLS));
 
         pw.println("  isGbaValid = " + isGbaValid(mContext));
         pw.println("  isImsTurnOffAllowed = " + isImsTurnOffAllowed());
